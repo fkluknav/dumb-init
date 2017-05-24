@@ -87,11 +87,11 @@ signed int process_count() {
             DEBUG("Checking /proc/%s.\n", ep->d_name);
             for (int i = 0; ep->d_name[i] != 0; ++i) {
                 if (!isdigit(ep->d_name[i])) {
-                    DEBUG("%s is NOT a digit.\n", ep->d_name[i]);
+                    DEBUG("%c is NOT a digit.\n", ep->d_name[i]);
                     nonnumber = 1;
                     break;
                 } else {
-                    DEBUG("%s is a digit.\n", ep->d_name[i]);
+                    DEBUG("%c is a digit.\n", ep->d_name[i]);
                 }
             }
             if (!nonnumber) {
