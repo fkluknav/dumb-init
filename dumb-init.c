@@ -84,14 +84,10 @@ signed int process_count() {
     {
         while ((ep = readdir (dp)) != NULL) {
             nonnumber = 0;
-            DEBUG("Checking /proc/%s.\n", ep->d_name);
             for (int i = 0; ep->d_name[i] != 0; ++i) {
                 if (!isdigit(ep->d_name[i])) {
-                    DEBUG("%c is NOT a digit.\n", ep->d_name[i]);
                     nonnumber = 1;
                     break;
-                } else {
-                    DEBUG("%c is a digit.\n", ep->d_name[i]);
                 }
             }
             if (!nonnumber) {
@@ -162,7 +158,7 @@ void handle_signal(int signum) {
         if ((bereaved == 1) && survive_bereaving) {
             signed int pc = process_count();
             DEBUG("Process count: %d", pc);
-            if (pc == 1) {
+            if (pc <= 1) {
                 DEBUG("No process left, exitting.\n");
                 exit(exit_status);
             }
