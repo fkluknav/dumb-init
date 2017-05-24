@@ -82,7 +82,7 @@ signed int process_count() {
     dp = opendir ("/proc");
     if (dp != NULL)
     {
-        while (ep = readdir (dp)) {
+        while ((ep = readdir (dp)) != NULL) {
             nonnumber = 0;
             DEBUG("Checking /proc/%s.\n", ep->d_name);
             for (int i = 0; ep->d_name[i] != 0; ++i) {
