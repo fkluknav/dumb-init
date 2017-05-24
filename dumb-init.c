@@ -84,13 +84,18 @@ signed int process_count() {
     {
         while (ep = readdir (dp)) {
             nonnumber = 0;
+            DEBUG("Checking /proc/%s.\n", ep->d_name);
             for (int i = 0; ep->d_name[i] != 0; ++i) {
                 if (!isdigit(ep->d_name[i])) {
+                    DEBUG("%s is NOT a digit.\n", ep->d_name[i]);
                     nonnumber = 1;
                     break;
+                } else {
+                    DEBUG("%s is a digit.\n", ep->d_name[i]);
                 }
             }
             if (!nonnumber) {
+                DEBUG("/proc/%s is a process\n", ep->d_name);
                 ++count;
                 if (count > 1) {
                     closedir(dp);
