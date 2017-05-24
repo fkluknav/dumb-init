@@ -101,7 +101,7 @@ signed int process_count() {
         }
         closedir(dp);
     } else {
-        DEBUG("Could not open /proc.\n");
+        PRINTERR("Could not open /proc.\n");
         return -1;
     }
     return count;
@@ -157,7 +157,7 @@ void handle_signal(int signum) {
          
         if ((bereaved == 1) && survive_bereaving) {
             signed int pc = process_count();
-            DEBUG("Process count: %d", pc);
+            DEBUG("Process count: %d\n", pc);
             if (pc <= 1) {
                 DEBUG("No process left, exitting.\n");
                 exit(exit_status);
