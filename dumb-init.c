@@ -19,6 +19,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <ctype.h>
 #include "VERSION.h"
 
 #define PRINTERR(...) do { \
@@ -42,6 +44,7 @@ int signal_rewrite[MAXSIG + 1] = {[0 ... MAXSIG] = -1};
 pid_t child_pid = -1;
 char debug = 0;
 char use_setsid = 1;
+char survive_bereaving = 0;
 
 int translate_signal(int signum) {
     if (signum <= 0 || signum > MAXSIG) {
@@ -68,6 +71,42 @@ void forward_signal(int signum) {
 }
 
 /*
+ * Read /proc and see if there are processes except init(PIDs)
+ */
+signed int process_count() {
+    DIR *dp;
+    struct dirent *ep;
+    char nonnumber;
+    signed int count = 0;
+
+    dp = opendir ("./");
+    if (dp != NULL)
+    {
+        while (ep = readdir (dp)) {
+            nonnumber = 0;
+            for (int i = 0; ep->d_name[i] != 0; ++i) {
+                if (!isdigit(ep->d_name[i])) {
+                    nonnumber = 1;
+                    break;
+                }
+            }
+            if (!nonnumber) {
+                ++count;
+                if (count > 1) {
+                    closedir(dp);
+                    return 2; //2 is enough, do not count further
+                }
+            }
+        }
+        closedir(dp);
+    } else {
+        DEBUG("Could not open /proc.\n");
+        return -1;
+    }
+    return count;
+}
+
+/*
  * The dumb-init signal handler.
  *
  * The main job of this signal handler is to forward signals along to our child
@@ -88,6 +127,7 @@ void forward_signal(int signum) {
  *
 */
 void handle_signal(int signum) {
+    static char bereaved = 0;
     DEBUG("Received signal %d.\n", signum);
     if (signum == SIGCHLD) {
         int status, exit_status;
@@ -103,9 +143,23 @@ void handle_signal(int signum) {
             }
 
             if (killed_pid == child_pid) {
-                forward_signal(SIGTERM);  // send SIGTERM to any remaining children
-                DEBUG("Child exited with status %d. Goodbye.\n", exit_status);
-                exit(exit_status);
+                bereaved = 1;
+                if (!survive_bereaving) {
+                    forward_signal(SIGTERM);  // send SIGTERM to any remaining children
+                    DEBUG("Child exited with status %d. Goodbye.\n", exit_status);
+                    exit(exit_status);
+                } else {
+                    DEBUG("Child exited with status %d. Stay alive for your grandchildren.\n", exit_status);
+                }
+            }
+
+            if ((bereaved == 0) && survive_bereaving) {
+                signed int pc = process_count();
+                DEBUG("Process count: %d", pc);
+                if (pc == 1) {
+                    DEBUG("No process left, exitting.\n");
+                    exit(exit_status);
+                }
             }
         }
     } else {
@@ -126,15 +180,16 @@ void print_help(char *argv[]) {
         "It is designed to run as PID1 in minimal container environments.\n"
         "\n"
         "Optional arguments:\n"
-        "   -c, --single-child   Run in single-child mode.\n"
-        "                        In this mode, signals are only proxied to the\n"
-        "                        direct child and not any of its descendants.\n"
-        "   -r, --rewrite s:r    Rewrite received signal s to new signal r before proxying.\n"
-        "                        To ignore (not proxy) a signal, rewrite it to 0.\n"
-        "                        This option can be specified multiple times.\n"
-        "   -v, --verbose        Print debugging information to stderr.\n"
-        "   -h, --help           Print this help message and exit.\n"
-        "   -V, --version        Print the current version and exit.\n"
+        "   -c, --single-child      Run in single-child mode.\n"
+        "                           In this mode, signals are only proxied to the\n"
+        "                           direct child and not any of its descendants.\n"
+        "   -b, --survive-bereaving Do not quit when the direct child dies.\n"
+        "   -r, --rewrite s:r       Rewrite received signal s to new signal r before proxying.\n"
+        "                           To ignore (not proxy) a signal, rewrite it to 0.\n"
+        "                           This option can be specified multiple times.\n"
+        "   -v, --verbose           Print debugging information to stderr.\n"
+        "   -h, --help              Print this help message and exit.\n"
+        "   -V, --version           Print the current version and exit.\n"
         "\n"
         "Full help is available online at https://github.com/Yelp/dumb-init\n",
         VERSION,
@@ -175,14 +230,15 @@ void set_rewrite_to_sigstop_if_not_defined(int signum) {
 char **parse_command(int argc, char *argv[]) {
     int opt;
     struct option long_options[] = {
-        {"help",         no_argument,       NULL, 'h'},
-        {"single-child", no_argument,       NULL, 'c'},
-        {"rewrite",      required_argument, NULL, 'r'},
-        {"verbose",      no_argument,       NULL, 'v'},
-        {"version",      no_argument,       NULL, 'V'},
+        {"help",             no_argument,       NULL, 'h'},
+        {"single-child",     no_argument,       NULL, 'c'},
+        {"rewrite",          required_argument, NULL, 'r'},
+        {"verbose",          no_argument,       NULL, 'v'},
+        {"version",          no_argument,       NULL, 'V'},
+        {"survive-bereaving",no_argument,       NULL, 'b'},
         {NULL,                     0,       NULL,   0},
     };
-    while ((opt = getopt_long(argc, argv, "+hvVcr:", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "+hvVcbr:", long_options, NULL)) != -1) {
         switch (opt) {
             case 'h':
                 print_help(argv);
@@ -198,6 +254,9 @@ char **parse_command(int argc, char *argv[]) {
                 break;
             case 'r':
                 parse_rewrite_signum(optarg);
+                break;
+            case 'b':
+                survive_bereaving = 1;
                 break;
             default:
                 exit(1);
