@@ -44,7 +44,7 @@ int signal_rewrite[MAXSIG + 1] = {[0 ... MAXSIG] = -1};
 pid_t child_pid = -1;
 char debug = 0;
 char use_setsid = 1;
-char survive_bereaving = 0;
+static char survive_bereaving = 0;
 
 int translate_signal(int signum) {
     if (signum <= 0 || signum > MAXSIG) {
@@ -152,16 +152,17 @@ void handle_signal(int signum) {
                     DEBUG("Child exited with status %d. Stay alive for your grandchildren.\n", exit_status);
                 }
             }
-
-            if ((bereaved == 0) && survive_bereaving) {
-                signed int pc = process_count();
-                DEBUG("Process count: %d", pc);
-                if (pc == 1) {
-                    DEBUG("No process left, exitting.\n");
-                    exit(exit_status);
-                }
+        }
+         
+        if ((bereaved == 1) && survive_bereaving) {
+            signed int pc = process_count();
+            DEBUG("Process count: %d", pc);
+            if (pc == 1) {
+                DEBUG("No process left, exitting.\n");
+                exit(exit_status);
             }
         }
+
     } else {
         forward_signal(signum);
         if (signum == SIGTSTP || signum == SIGTTOU || signum == SIGTTIN) {
