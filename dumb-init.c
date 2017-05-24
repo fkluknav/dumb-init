@@ -79,7 +79,7 @@ signed int process_count() {
     char nonnumber;
     signed int count = 0;
 
-    dp = opendir ("./");
+    dp = opendir ("/proc");
     if (dp != NULL)
     {
         while (ep = readdir (dp)) {
