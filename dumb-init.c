@@ -188,6 +188,8 @@ void print_help(char *argv[]) {
         "   -b, --survive-bereaving Do not quit when the direct child dies.\n"
         "   -r, --rewrite s:r       Rewrite received signal s to new signal r before proxying.\n"
         "                           To ignore (not proxy) a signal, rewrite it to 0.\n"
+        "                           To rewrite all signals, rewrite (otherwise nonexistent) signal 0.\n"
+        "                           (Useful to ignore all signals, use '--rewrite 0:0').\n"
         "                           This option can be specified multiple times.\n"
         "   -v, --verbose           Print debugging information to stderr.\n"
         "   -h, --help              Print this help message and exit.\n"
@@ -219,6 +221,10 @@ void parse_rewrite_signum(char *arg) {
         (replacement >= 0 && replacement <= MAXSIG)
     ) {
         signal_rewrite[signum] = replacement;
+    } else if (signum == 0) {
+        for (int i = 0; i <= MAXSIG; ++i) {
+            signal_rewrite[i] = replacement;
+        }
     } else {
         print_rewrite_signum_help();
     }
@@ -356,8 +362,22 @@ int main(int argc, char *argv[]) {
         /* parent */
         DEBUG("Child spawned with PID %d.\n", child_pid);
         for (;;) {
-            int signum;
-            sigwait(&all_signals, &signum);
+            struct timespec timeout = {1, 0};
+            int signum = sigtimedwait(&all_signals, NULL, &timeout);
+            if (signum == -1) {
+                switch (errno) {
+                    case EINVAL: 
+                        PRINTERR("Invalid timeout, report this as a bug!\n");
+                        exit(1);
+                    case EINTR:
+                        PRINTERR("Wait interrupted by a signal. This should never happen. Report this as a bug!\n");
+                        exit(1);
+                    case EAGAIN:
+                        //pretend timeout to be SIGCHLD, check if we want to continue running
+                        signum = SIGCHLD;
+                        DEBUG("Heartbeat...\n");
+                }
+            }
             handle_signal(signum);
         }
     }
