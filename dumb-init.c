@@ -36,7 +36,9 @@
 // Signals we care about are numbered from 1 to 31, inclusive.
 // (32 and above are real-time signals.)
 // TODO: this is likely not portable outside of Linux, or on strange architectures
-#define MAXSIG 31
+// EDIT: we actually care about some real-time signals as well
+// SIGRTMAX is not a constant, use 64
+#define MAXSIG 64
 
 // Indices are one-indexed (signal 1 is at index 1). Index zero is unused.
 int signal_rewrite[MAXSIG + 1] = {[0 ... MAXSIG] = -1};
