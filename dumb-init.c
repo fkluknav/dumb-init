@@ -219,13 +219,15 @@ void parse_rewrite_signum(char *arg) {
     int signum, replacement;
     if (
         sscanf(arg, "%d:%d", &signum, &replacement) == 2 &&
-        (signum >= 1 && signum <= MAXSIG) &&
+        (signum >= 0 && signum <= MAXSIG) &&
         (replacement >= 0 && replacement <= MAXSIG)
     ) {
-        signal_rewrite[signum] = replacement;
-    } else if (signum == 0) {
-        for (int i = 0; i <= MAXSIG; ++i) {
-            signal_rewrite[i] = replacement;
+        if (signum == 0) {
+            for (int i = 0; i <= MAXSIG; ++i) {
+                signal_rewrite[i] = replacement;
+            }
+        } else {
+            signal_rewrite[signum] = replacement;
         }
     } else {
         print_rewrite_signum_help();
