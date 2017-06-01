@@ -42,6 +42,7 @@
 
 // Indices are one-indexed (signal 1 is at index 1). Index zero is unused.
 int signal_rewrite[MAXSIG + 1] = {[0 ... MAXSIG] = -1};
+char *signal_action[MAXSIG + 1] = {[0 ... MAXSIG] = ""};
 
 pid_t child_pid = -1;
 char debug = 0;
@@ -62,13 +63,34 @@ int translate_signal(int signum) {
     }
 }
 
+void do_action(int signum) {
+    DEBUG("Action for signal %d: running %s\n", signum, signal_action[signum]);
+    int child_pid = fork();
+    if (child_pid < 0) {
+        PRINTERR("Unable to fork. Exiting.\n");
+        exit(1);
+    } else if (child_pid == 0) {
+        /* child */
+        sigset_t all_signals;
+        sigfillset(&all_signals);
+        sigprocmask(SIG_UNBLOCK, &all_signals, NULL);
+        execlp("/bin/bash", "/bin/bash", "-c", signal_action[signum], (char *)NULL);
+
+        // if this point is reached, exec failed, so we should exit nonzero
+        PRINTERR("Could not exec %s: %s\n", signal_action[signum], strerror(errno));
+        exit(1);
+    }
+}
+
 void forward_signal(int signum) {
-    signum = translate_signal(signum);
-    if (signum != -1) {
-        kill(use_setsid ? -child_pid : child_pid, signum);
-        DEBUG("Forwarded signal %d to children.\n", signum);
+    int new_signum = translate_signal(signum);
+    if (new_signum == -2) {
+        do_action(signum);
+    } else if (new_signum != -1) {
+        kill(use_setsid ? -child_pid : child_pid, new_signum);
+        DEBUG("Forwarded signal %d to children.\n", new_signum);
     } else {
-        DEBUG("Not forwarding signal %d to children (ignored).\n", signum);
+        DEBUG("Not forwarding signal %d to children (ignored).\n", new_signum);
     }
 }
 
@@ -193,6 +215,9 @@ void print_help(char *argv[]) {
         "                           To rewrite all signals, rewrite (otherwise nonexistent) signal 0.\n"
         "                           (Useful to ignore all signals, use '--rewrite 0:0').\n"
         "                           This option can be specified multiple times.\n"
+        "   -a, --action s:exe      Run exe after receiving sinal s.\n"
+        "                           For example, -a '2:echo hi there'.\n"
+        "                           This option can be specified multiple times.\n"
         "   -v, --verbose           Print debugging information to stderr.\n"
         "   -h, --help              Print this help message and exit.\n"
         "   -V, --version           Print the current version and exit.\n"
@@ -207,11 +232,24 @@ void print_rewrite_signum_help() {
     fprintf(
         stderr,
         "Usage: -r option takes <signum>:<signum>, where <signum> "
+        "is between 0 and %d.\n"
+        "This option can be specified multiple times.\n"
+        "Use --help for full usage.\n",
+        MAXSIG
+    );
+    exit(1);
+}
+
+void print_action_help() {
+    fprintf(
+        stderr,
+        "Usage: -a option takes <signum>:<path>, where <signum> "
         "is between 1 and %d.\n"
         "This option can be specified multiple times.\n"
         "Use --help for full usage.\n",
         MAXSIG
     );
+
     exit(1);
 }
 
@@ -234,6 +272,21 @@ void parse_rewrite_signum(char *arg) {
     }
 }
 
+void parse_action(char *arg) {
+    int signum;
+    int status;
+    int position;
+    if (
+        (status = sscanf(arg, "%d:%n", &signum, &position)) == 1 &&
+        (signum >= 0 && signum <= MAXSIG)
+    ) {
+        DEBUG("signal action: %d, position %d\n", signum, position);
+        signal_action[signum] = &(arg[position]);
+        signal_rewrite[signum] = -2;
+    } else {
+        print_action_help();
+    }
+}
 void set_rewrite_to_sigstop_if_not_defined(int signum) {
     if (signal_rewrite[signum] == -1)
         signal_rewrite[signum] = SIGSTOP;
@@ -248,9 +301,10 @@ char **parse_command(int argc, char *argv[]) {
         {"verbose",          no_argument,       NULL, 'v'},
         {"version",          no_argument,       NULL, 'V'},
         {"survive-bereaving",no_argument,       NULL, 'b'},
+        {"action",           required_argument, NULL, 'a'},
         {NULL,                     0,       NULL,   0},
     };
-    while ((opt = getopt_long(argc, argv, "+hvVcbr:", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "+hvVcbr:a:", long_options, NULL)) != -1) {
         switch (opt) {
             case 'h':
                 print_help(argv);
@@ -267,10 +321,14 @@ char **parse_command(int argc, char *argv[]) {
             case 'r':
                 parse_rewrite_signum(optarg);
                 break;
+            case 'a':
+                parse_action(optarg);
+                break;
             case 'b':
                 survive_bereaving = 1;
                 break;
             default:
+                PRINTERR("Error while parsing arguments.\n");
                 exit(1);
         }
     }
