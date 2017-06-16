@@ -184,7 +184,7 @@ void handle_signal(int signum) {
             DEBUG("Process count: %d\n", pc);
             if (pc <= 1) {
                 DEBUG("No process left, exitting.\n");
-                exit(exit_status);
+                exit(0);
             }
         }
 
